@@ -1,0 +1,1393 @@
+
+<!DOCTYPE html>  <html lang="fr">  
+<head>  
+<meta charset="UTF-8">  
+<title>Mini CMS IA avec Login</title>  
+<style>  
+body { font-family: Arial; background:#f9f9f9; margin:0; padding:0; }  
+h1 { text-align:center; margin:20px 0; }  #loginBtn {
+position: fixed; top:20px; right:20px; padding:10px 16px;
+background:#6a00ff; color:white; border:none; border-radius:8px; cursor:pointer; z-index:1000;
+}
+
+/* Modal login */
+#loginModal {
+display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;
+}
+#loginModalContent {
+background:#fff; padding:20px; border-radius:12px; min-width:300px; box-shadow:0 10px 25px rgba(0,0,0,0.2);
+}
+#loginModalContent input { width:100%; margin-bottom:10px; padding:8px; border-radius:6px; border:1px solid #ccc; }
+#loginModalContent button { padding:8px 12px; border:none; border-radius:6px; cursor:pointer; }
+#loginModalContent .submitBtn { background:#6a00ff; color:#fff; }
+#loginModalContent .cancelBtn { background:#ccc; margin-left:10px; }
+
+#articleForm {
+max-width:600px; margin:60px auto 30px auto; padding:20px;
+background:#fff; border-radius:14px; box-shadow:0 10px 25px rgba(0,0,0,0.1); display:none;
+}
+#articleForm input,#articleForm textarea { width:100%; padding:10px; margin-bottom:12px; border-radius:8px; border:1px solid #ccc; }
+#articleForm button { padding:10px 16px; background:#6a00ff; color:#fff; border:none; border-radius:8px; cursor:pointer; }
+#articleForm button:hover { background:#5200cc; }
+
+#preview { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+#preview img { max-height:100px; border-radius:8px; border:1px solid #ccc; }
+
+.articles-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; padding:20px; }
+.article-card { border-radius:14px; box-shadow:0 10px 25px rgba(0,0,0,0.1); overflow:hidden; background:#fff; transition:transform 0.2s; position:relative; cursor:pointer; }
+.article-card:hover { transform: translateY(-5px);}
+.article-card img { width:100%; max-height:200px; object-fit:contain; display:block; margin:auto; margin-bottom:10px; }
+.article-card h3 { margin:12px; font-size:18px; }
+.article-card p { margin:0 12px 12px 12px; font-size:14px; color:#555; }
+.article-card button { margin:6px 12px; padding:6px 10px; border:none; border-radius:6px; cursor:pointer; }
+.edit-btn { background:#ff9900; color:#fff; }
+.delete-btn { background:#ff4444; color:#fff; }
+
+#homeBtn {
+position:fixed; top:20px; left:20px; padding:10px 16px;
+background:#6a00ff; color:white; border:none; border-radius:8px; cursor:pointer; z-index:1000;
+}
+
+#detailView { display:none; padding:20px; max-width:700px; margin:0 auto; background:#fff; border-radius:14px; box-shadow:0 10px 25px rgba(0,0,0,0.1); }
+#detailView img { max-width:100%; margin-bottom:10px; display:block; margin:auto; }
+
+#searchInput { display:block; margin:20px auto; max-width:400px; padding:8px 12px; border-radius:8px; border:1px solid #ccc; display:none; }
+</style>
+
+</head>  
+<body>  <button id="homeBtn">🏠 Accueil</button>
+<button id="loginBtn">Login</button>
+<input type="text" id="searchInput" placeholder="Rechercher un article...">
+
+<!-- Formulaire Article -->  <div id="articleForm">  
+  <h2 id="formTitle">Ajouter un nouvel article</h2>  
+  <input type="text" id="title" placeholder="Titre" required>  
+  <textarea id="description" placeholder="Description" rows="3" required></textarea>  
+  <input type="file" id="images" accept="image/*" multiple>  
+  <div id="preview"></div>  
+  <button onclick="submitArticle()">Ajouter l'article</button>  
+</div>  <!-- Liste Articles -->  <div id="articlesContainer" class="articles-grid"></div>  <!-- Detail Article -->  <div id="detailView">  
+  <h2 id="detailTitle"></h2>  
+  <div id="detailImages"></div>  
+  <p id="detailDescription"></p>  
+</div>  <!-- Modal Login -->  <div id="loginModal">  
+  <div id="loginModalContent">  
+    <h3>Connexion</h3>  
+    <input type="text" id="user" placeholder="Utilisateur">  
+    <input type="password" id="pass" placeholder="Mot de passe">  
+    <button class="submitBtn" onclick="loginUser()">Se connecter</button>  
+    <button class="cancelBtn" onclick="closeModal()">Annuler</button>  
+  </div>  
+</div>  <script>  
+// --- Articles persistants ---  
+let articles = JSON.parse(localStorage.getItem('articles')) || [  
+  { title:"Pack Débutant IA", description:"Apprenez les bases de l'IA et ChatGPT.", images:["https://via.placeholder.com/400x300?text=Débutant+IA"] }  
+];  
+  
+let editIndex = null;  
+const previewDiv = document.getElementById('preview');  
+const imagesInput = document.getElementById('images');  
+const searchInput = document.getElementById('searchInput');  
+const detailView = document.getElementById('detailView');  
+const articleForm = document.getElementById('articleForm');  
+  
+// --- Login ---  
+const loginModal = document.getElementById('loginModal');  
+document.getElementById('loginBtn').addEventListener('click', ()=>{ loginModal.style.display='flex'; });  
+function closeModal(){ loginModal.style.display='none'; }  
+function loginUser(){  
+  const user = document.getElementById('user').value;  
+  const pass = document.getElementById('pass').value;  
+  if(user==='admin' && pass==='1234'){   
+    alert('Connexion réussie !');   
+    closeModal();  
+    articleForm.style.display='block';  
+    searchInput.style.display='block';  
+    document.getElementById('loginBtn').style.display='none';  
+  } else { alert('Identifiants incorrects'); }  
+}  
+  
+// --- Prévisualisation des images ---  
+imagesInput.addEventListener('change', ()=>{  
+  previewDiv.innerHTML = '';  
+  Array.from(imagesInput.files).forEach(file=>{  
+    const reader = new FileReader();  
+    reader.onload = e=>{  
+      const img = document.createElement('img');  
+      img.src = e.target.result;  
+      previewDiv.appendChild(img);  
+    };  
+    reader.readAsDataURL(file);  
+  });  
+});  
+  
+// --- Afficher articles ---  
+function loadArticles(filter=''){  
+  const container = document.getElementById('articlesContainer');  
+  container.innerHTML='';  
+  articles.forEach((a,i)=>{  
+    if(a.title.toLowerCase().includes(filter.toLowerCase()) || a.description.toLowerCase().includes(filter.toLowerCase())){  
+      const card = document.createElement('div');  
+      card.className='article-card';  
+      card.addEventListener('click', (e)=>{  
+        if(!e.target.classList.contains('edit-btn') && !e.target.classList.contains('delete-btn')){  
+          openDetailView(i);  
+        }  
+      });  
+      const imagesHTML = a.images.map(img=>`<img src="CCC${img}" alt="${a.title}">`).join('');  
+      card.innerHTML = `  
+        ${imagesHTML}  
+        <h3>${a.title}</h3>  
+        <p>${a.description}</p>  
+        <button class="edit-btn" onclick="editArticle(${i})">Modifier</button>  
+        <button class="delete-btn" onclick="deleteArticle(${i})">Supprimer</button>  
+      `;  
+      container.appendChild(card);  
+    }  
+  });  
+}  
+  
+// --- Ouvrir détail article ---  
+function openDetailView(index){  
+  const article = articles[index];  
+  detailView.style.display='block';  
+  document.getElementById('detailTitle').textContent = article.title;  
+  document.getElementById('detailImages').innerHTML = article.images.map(img=>`<img src="${img}">`).join('');  
+  document.getElementById('detailDescription').textContent = article.description;  
+  window.scrollTo({top:0, behavior:'smooth'});  
+}  
+  
+// --- Bouton Accueil ---  
+document.getElementById('homeBtn').addEventListener('click', ()=>{  
+  detailView.style.display='none';  
+  window.scrollTo({top:0, behavior:'smooth'});  
+  document.getElementById('title').value='';  
+  document.getElementById('description').value='';  
+  imagesInput.value='';  
+  previewDiv.innerHTML='';  
+  document.getElementById('formTitle').textContent="Ajouter un nouvel article";  
+  document.querySelector('#articleForm button').textContent="Ajouter l'article";  
+});  
+  
+// --- Ajouter / Modifier article ---  
+function submitArticle(){  
+  const title = document.getElementById('title').value.trim();  
+  const description = document.getElementById('description').value.trim();  
+  const files = Array.from(imagesInput.files);  
+  if(!title || !description){ alert("Titre et description requis !"); return; }  
+  
+  if(files.length>0){  
+    let images = [];  
+    let loaded=0;  
+    files.forEach(file=>{  
+      const reader = new FileReader();  
+      reader.onload=e=>{  
+        images.push(e.target.result);  
+        loaded++;  
+        if(loaded === files.length) finalize(images);  
+      };  
+      reader.readAsDataURL(file);  
+    });  
+  } else {  
+    finalize(null);  
+  }  
+  
+  function finalize(newImages){  
+    if(editIndex!==null){  
+      articles[editIndex].title=title;  
+      articles[editIndex].description=description;  
+      if(newImages) articles[editIndex].images=newImages;  
+      editIndex=null;  
+      document.getElementById('formTitle').textContent="Ajouter un nouvel article";  
+      document.querySelector('#articleForm button').textContent="Ajouter l'article";  
+    } else {  
+      if(!newImages) newImages=["https://via.placeholder.com/400x300?text=Image+IA"];  
+      articles.push({title, description, images:newImages});  
+    }  
+    localStorage.setItem('articles', JSON.stringify(articles));  
+    loadArticles(searchInput.value);  
+    document.getElementById('title').value='';  
+    document.getElementById('description').value='';  
+    imagesInput.value='';  
+    previewDiv.innerHTML='';  
+    detailView.style.display='none';  
+  }  
+}  
+  
+// --- Editer article ---  
+function editArticle(index){  
+  editIndex=index;  
+  document.getElementById('title').value=articles[index].title;  
+  document.getElementById('description').value=articles[index].description;  
+  document.getElementById('formTitle').textContent="Modifier l'article";  
+  document.querySelector('#articleForm button').textContent="Valider les modifications";  
+  previewDiv.innerHTML='';  
+}  
+  
+// --- Supprimer article ---  
+function deleteArticle(index){  
+  if(confirm("Supprimer cet article ?")){  
+    articles.splice(index,1);  
+    localStorage.setItem('articles', JSON.stringify(articles));  
+    loadArticles(searchInput.value);  
+    detailView.style.display='none';  
+  }  
+}  
+  
+// --- Recherche instantanée ---  
+searchInput.addEventListener('input', ()=>{  
+  loadArticles(searchInput.value);  
+});  
+  
+// --- Initialisation ---  
+loadArticles();  
+</script>  </body>  
+</html>  
+<!DOCTYPE html>  
+<html lang="fr">  
+<head><header style="display:flex; align-items:center; justify-content:space-between; padding:20px; background:none;">  
+  <!-- Logo + Titre -->  
+  <div style="display:flex; align-items:center; gap:20px;">  
+    <img id="logo" src="CCC.png" alt="Logo" style="width:100px; height:100px; object-fit:contain; cursor:pointer;">  <!-- Titre rouge ou calligraphie stylée -->  
+<h1 class="header-title-red">Atete Majesty </h1>
+
+  </div>  
+
+<!DOCTYPE html>  
+<html lang="fr">  
+<head>  
+<!DOCTYPE html>  
+<html lang="fr">  
+<head>  
+<meta charset="UTF-8">  
+<title>Menu Premium Ultime</title>  
+<style>  
+:root {  
+  --primary: #6a00ff;  
+  --bg: #ffffff;  
+  --text: #000000;  
+  --box: #f3f3f3;  
+}  .dark {
+--bg: #121212;
+--text: #ffffff;
+--box: #1f1f1f;
+}
+
+body {
+margin: 0;
+font-family: Arial, sans-serif;
+background: var(--bg);
+color: var(--text);
+overflow-x: hidden;
+}
+
+/* Top bar */
+.top-bar {
+display: flex;
+justify-content: flex-end;
+align-items: center;
+padding: 15px 25px;
+gap: 10px;
+position: relative;
+}
+
+/* Hamburger button */
+.menu-btn {
+width: 42px;
+height: 42px;
+border-radius: 10px;
+background: var(--bg);
+border: 1px solid #ddd;
+cursor: pointer;
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+gap: 5px;
+transition: 0.3s;
+z-index: 1001;
+}
+
+.menu-btn span {
+width: 22px;
+height: 2px;
+background: var(--text);
+transition: 0.3s;
+}
+
+.menu-btn.active span:nth-child(1) {
+transform: rotate(45deg) translate(5px,5px);
+}
+.menu-btn.active span:nth-child(2) {
+opacity: 0;
+}
+.menu-btn.active span:nth-child(3) {
+transform: rotate(-45deg) translate(6px,-6px);
+}
+
+/* Slide menu */
+.menu {
+position: fixed;
+top: 0;
+right: -260px;
+width: 260px;
+height: 100%;
+background: var(--bg);
+box-shadow: -10px 0 30px rgba(0,0,0,0.2);
+padding: 20px;
+transition: 0.4s;
+z-index: 1000;
+display: flex;
+flex-direction: column;
+}
+
+.menu.open {
+right: 0;
+}
+
+/* Menu links */
+.menu a, .menu button {
+display: block;
+padding: 14px;
+margin-bottom: 10px;
+border-radius: 8px;
+text-decoration: none;
+color: var(--text);
+background: var(--box);
+border: none;
+cursor: pointer;
+transition: 0.2s;
+}
+
+.menu a:hover, .menu button:hover {
+background: var(--primary);
+color: #fff;
+}
+
+/* WhatsApp color */
+.whatsapp {
+color: #25D366;
+font-weight: bold;
+}
+
+/* Dark mode switch */
+.switch {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-top: auto;
+}
+
+/* Assistant popup */
+.popup {
+display: none;
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,0.6);
+justify-content: center;
+align-items: center;
+z-index: 1100;
+}
+
+.popup-content {
+background: var(--bg);
+padding: 20px;
+border-radius: 14px;
+width: 90%;
+max-width: 400px;
+}
+
+.popup-content input {
+width: 100%;
+padding: 12px;
+margin-top: 10px;
+}
+
+.popup-content button {
+width: 100%;
+padding: 12px;
+margin-top: 10px;
+background: var(--primary);
+color: #fff;
+border: none;
+border-radius: 8px;
+}
+</style>
+
+</head>  <body>  <div class="top-bar">  
+  <div class="login-btn"></div>    <div class="menu-btn" id="menuBtn" onclick="toggleMenu()">  
+    <span></span><span></span><span></span>  
+  </div>  
+</div>  <!-- Slide Menu -->  <div class="menu" id="menu">  
+  <a href="#">👤 Profil</a>  
+  <a href="#">🎓 Mes formations</a>  
+  <a href="#" onclick="openAssistant()">🤖 Assistant IA</a>  
+  <a href="https://wa.me/243824321288" target="_blank">📲 WhatsApp</a>  
+  <a href="#">💳 Page de vente</a>  <button onclick="toggleDarkMode()">🌙 Mode sombre</button>
+
+</div>  <!-- Assistant IA Popup -->  <div class="popup" id="assistantPopup">  
+  <div class="popup-content">  
+    <h3>🤖 Assistant IA</h3>  
+    <input type="text" placeholder="Pose ta question IA...">  
+    <button onclick="closeAssistant()">Fermer</button>  
+  </div>  
+</div>  <script>  
+const menu = document.getElementById("menu");  
+const menuBtn = document.getElementById("menuBtn");  
+  
+// Ouvrir / fermer menu au clic  
+function toggleMenu() {  
+  const isOpen = menu.classList.toggle("open");  
+  menuBtn.classList.toggle("active", isOpen);  
+  
+  // Bloquer scroll  
+  document.body.style.overflow = isOpen ? "hidden" : "";  
+}  
+  
+// Fermer menu  
+function closeMenu() {  
+  menu.classList.remove("open");  
+  menuBtn.classList.remove("active");  
+  document.body.style.overflow = "";  
+}  
+  
+// Clic en dehors  
+document.addEventListener("click", function(e) {  
+  if (menu.classList.contains("open") &&  
+      !menu.contains(e.target) &&  
+      !menuBtn.contains(e.target)) {  
+    closeMenu();  
+  }  
+});  
+  
+// ESC ferme menu  
+document.addEventListener("keydown", function(e) {  
+  if (e.key === "Escape") closeMenu();  
+});  
+  
+// Swipe pour mobile (gauche)  
+let startX = null;  
+menu.addEventListener("touchstart", e => startX = e.touches[0].clientX);  
+menu.addEventListener("touchmove", e => {  
+  if (!startX) return;  
+  let touchX = e.touches[0].clientX;  
+  if (touchX - startX < -50) closeMenu(); // swipe gauche  
+});  
+  
+// Auto-fermeture après clic sur lien  
+menu.querySelectorAll("a").forEach(link => {  
+  link.addEventListener("click", closeMenu);  
+});  
+  
+// Dark mode  
+function toggleDarkMode() {  
+  document.body.classList.toggle("dark");  
+}  
+  
+// Assistant IA popup  
+function openAssistant() {  
+  document.getElementById("assistantPopup").style.display = "flex";  
+}  
+function closeAssistant() {  
+  document.getElementById("assistantPopup").style.display = "none";  
+}  
+</script>  </body>  
+</html>  
+</script>    </button>  
+</header>  
+<div class="container">  
+  <p style="text-align:center;font-family:'Orbitron',sans-serif;font-size:1.2rem;">  
+ 
+  
+     
+
+<!-- Modal Login -->  
+<div id="loginModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">  
+  <div style="background:#0b0b0b; padding:30px; border-radius:15px; width:300px; max-width:90%; text-align:center; position:relative; color:white;">  
+    <h2>Connexion</h2>  
+    <input type="email" id="loginEmail" placeholder="Email" style="width:100%; padding:10px; margin:10px 0; border-radius:8px; border:none; outline:none;">  
+    <input type="password" id="loginPassword" placeholder="Mot de passe" style="width:100%; padding:10px; margin:10px 0; border-radius:8px; border:none; outline:none;">  
+    <button id="loginSubmit" style="width:100%; padding:10px; margin-top:15px; background:#ff0000; color:white; border:none; border-radius:8px; cursor:pointer;">  
+      Se connecter  
+    </button>  
+    <span id="closeLogin" style="position:absolute; top:10px; right:15px; cursor:pointer; font-size:20px;">❌</span>  
+  </div>  
+</div>  <!-- Google Fonts calligraphie pour le titre -->  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">  <style>  
+  .header-title-red {  
+    font-family: 'Dancing Script', cursive;  
+    font-size: 3rem;  
+    margin: 0;  
+    white-space: nowrap;  
+    color: #ff0000;  
+    text-shadow:  
+      2px 2px 0 #222222,  
+      4px 4px 0 #111111,  
+      6px 6px 0 #660000,  
+      8px 8px 10px rgba(0,0,0,0.5);  
+    transform-style: preserve-3d;  
+    animation: float3D 4s ease-in-out infinite;  
+  }  
+  
+  @keyframes float3D {  
+    0%, 100% { transform: translateY(0); }  
+    25% { transform: translateY(-8px); }  
+    50% { transform: translateY(-12px); }  
+    75% { transform: translateY(-6px); }  
+  }  
+  
+  /* Responsive */  
+  @media(max-width:600px){  
+    .header-title-red{  
+      font-size:2rem;  
+    }  
+    #logo{  
+      width:70px;  
+      height:70px;  
+    }  
+    #openLoginBtn{  
+      padding:8px 15px;  
+      font-size:0.9rem;  
+    }  
+  }  
+</style>  <script>  
+  const loginModal = document.getElementById('loginModal');  
+  const openLoginBtn = document.getElementById('openLoginBtn');  
+  const closeLogin = document.getElementById('closeLogin');  
+  const loginSubmit = document.getElementById('loginSubmit');  
+  
+  // Ouvrir modal login  
+  openLoginBtn.addEventListener('click', () => {  
+    loginModal.style.display = 'flex';  
+  });  
+  
+  // Fermer modal  
+  closeLogin.addEventListener('click', () => {  
+    loginModal.style.display = 'none';  
+  });  
+  
+  // Simuler connexion  
+  loginSubmit.addEventListener('click', () => {  
+    const email = document.getElementById('loginEmail').value;  
+    const password = document.getElementById('loginPassword').value;  
+  
+    if(email && password){  
+      alert(`Connexion réussie pour ${email} !`);  
+      loginModal.style.display = 'none';  
+    } else {  
+      alert('Veuillez remplir tous les champs');  
+    }  
+  });  
+  
+  // Fermer en cliquant en dehors de la modal  
+  window.addEventListener('click', (e) => {  
+    if(e.target == loginModal){  
+      loginModal.style.display = 'none';  
+    }  
+  });  
+</script>    <!DOCTYPE html>  <!DOCTYPE html>  <html lang="fr">  
+<head>  
+<met
+  <!-- BOUTON LIKE -->
+<button onclick="likePost()">❤️ Like (<span id="likeCount">0</span>)</button>
+
+<script>
+let likes = localStorage.getItem("likes") || 0;
+document.getElementById("likeCount").innerText = likes;
+
+function likePost(){
+  likes++;
+  localStorage.setItem("likes", likes);
+  document.getElementById("likeCount").innerText = likes;
+}
+</script>
+  <p>Vues : <span id="views">0</span></p>
+
+<script>
+let views = localStorage.getItem("views") || 0;
+views++;
+localStorage.setItem("views", views);
+document.getElementById("views").innerText = views;
+</script>
+  </button>
+</header>
+<div class="container">
+  <p style="text-align:center;font-family:'Orbitron',sans-serif;font-size:1.2rem;">
+    Salut et Bienvenu(e)s chez Atete Majesty, ici on vous apprends tout sur l'IA'
+  </p>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+<form action="https://www.google.com/search" method="get" target="_blank">
+  <input type="text" name="q" placeholder="Rechercher sur Google">
+  <button type="submit">🔍</button>
+</form> 
+</script>
+  <h2>Solutions IA</h2>
+
+<div class="grid">
+
+<button onclick="tool('chat')">Assistant IA</button>
+<button onclick="tool('poster')">Générer Affiche</button>
+<button onclick="tool('image')">Créer Image IA</button>
+<button onclick="tool('write')">Rédiger Texte</button>
+
+</div>
+
+<script>
+function tool(type){
+
+  if(type === "chat"){
+    window.open("https://chat.openai.com","_blank");
+  }
+
+  if(type === "poster"){
+    window.open("https://www.canva.com","_blank");
+  }
+
+  if(type === "image"){
+    window.open("https://leonardo.ai","_blank");
+  }
+
+  if(type === "write"){
+    window.open("https://gemini.google.com","_blank");
+  }
+
+}
+</script>
+  <h2>Générateur d’Affiches</h2>
+
+<button onclick="openCanva()">Créer sur Canva</button>
+<button onclick="openAdobe()">Créer sur Adobe Express</button>
+<button onclick="openPixlr()">Retouche Photo</button>
+
+  
+<script>
+function openCanva(){
+  window.open("https://www.canva.com", "_blank");
+}
+
+function openAdobe(){
+  window.open("https://www.adobe.com/express", "_blank");
+}
+
+function openPixlr(){
+  window.open("https://pixlr.com", "_blank");
+}
+</script>
+  <style>
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:15px;
+}
+
+button{
+  padding:20px;
+  font-size:16px;
+  cursor:pointer;
+}
+</style>
+  <!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CMS IA - Upload Affiches</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f9f9f9; padding:20px; }
+h1 { text-align:center; }
+#uploadContainer { max-width:1000px; margin:20px auto; }
+#preview { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+.preview-card { border:1px solid #ccc; border-radius:8px; padding:10px; background:#fff; width:200px; }
+.preview-card img { width:100%; max-height:150px; object-fit:contain; border-radius:6px; margin-bottom:5px; }
+.preview-card input { width:100%; margin-bottom:5px; padding:5px; border-radius:4px; border:1px solid #ccc; }
+button { padding:10px 16px; border:none; border-radius:8px; background:#6a00ff; color:white; cursor:pointer; margin-top:10px; }
+button:hover { background:#5200cc; }
+</style>
+</head>
+<body>
+
+<h1>Uploader et Préparer Affiches</h1>
+
+<div id="uploadContainer">
+  <input type="file" id="imagesInput" accept="image/*" multiple>
+  <p>Maximum 100 images.</p>
+  <div id="preview"></div>
+  <button onclick="saveImages()">Sauvegarder dans le CMS</button>
+</div>
+
+<script>
+const imagesInput = document.getElementById('imagesInput');
+const previewDiv = document.getElementById('preview');
+
+let uploadedImages = [];
+
+// Prévisualisation des images avec titre/description
+imagesInput.addEventListener('change', () => {
+  const files = Array.from(imagesInput.files).slice(0,100);
+  previewDiv.innerHTML = '';
+  uploadedImages = []; // reset
+
+  files.forEach((file,index) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const card = document.createElement('div');
+      card.className = 'preview-card';
+      card.innerHTML = `
+        <img src="${e.target.result}" alt="Affiche ${index+1}">
+        <input type="text" placeholder="Titre de l'affiche" id="title-${index}">
+        <input type="text" placeholder="Description" id="desc-${index}">
+      `;
+      previewDiv.appendChild(card);
+      uploadedImages.push({ file: file, preview: e.target.result });
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
+// Fonction pour sauvegarder toutes les images + titres + descriptions
+function saveImages(){
+  if(uploadedImages.length === 0){ alert("Aucune image sélectionnée !"); return; }
+
+  const cmsImages = uploadedImages.map((img,index) => {
+    const title = document.getElementById(`title-${index}`).value || `Affiche ${index+1}`;
+    const desc = document.getElementById(`desc-${index}`).value || "";
+    return {
+      title: title,
+      description: desc,
+      data: img.preview
+    };
+  });
+
+  // Ici tu peux : 
+  // - envoyer cmsImages à ton serveur
+  // - ou les stocker dans localStorage
+  localStorage.setItem('cmsImages', JSON.stringify(cmsImages));
+  alert(`${cmsImages.length} affiches prêtes pour le CMS IA !`);
+}
+</script>
+
+</body>
+</html>
+<!-- Popup édition -->
+<div id="editorPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:10000;">
+  <div style="background:#fff; padding:20px; border-radius:12px; max-width:500px; width:90%; text-align:center; position:relative;">
+    <span id="closeEditor" style="position:absolute; top:10px; right:15px; cursor:pointer; font-size:20px;">❌</span>
+    <h2>Modifier l'affiche</h2>
+    <img id="editorImage" src="" style="max-width:100%; margin-bottom:10px; border-radius:6px;">
+    <input type="text" id="editorTitle" placeholder="Titre">
+    <input type="text" id="editorDesc" placeholder="Description">
+    <button onclick="saveEditor()">Sauvegarder</button>
+  </div>
+</div>
+
+<script>
+let currentEditIndex = null;
+const editorPopup = document.getElementById('editorPopup');
+const editorImage = document.getElementById('editorImage');
+const editorTitle = document.getElementById('editorTitle');
+const editorDesc = document.getElementById('editorDesc');
+const closeEditor = document.getElementById('closeEditor');
+
+// Ouvrir l'éditeur au clic sur l'image
+document.addEventListener('click', (e) => {
+  if(e.target.tagName === 'IMG' && e.target.closest('.preview-card')){
+    currentEditIndex = Array.from(previewDiv.children).indexOf(e.target.closest('.preview-card'));
+    const imgData = uploadedImages[currentEditIndex];
+    editorImage.src = imgData.preview;
+    editorTitle.value = document.getElementById(`title-${currentEditIndex}`).value;
+    editorDesc.value = document.getElementById(`desc-${currentEditIndex}`).value;
+    editorPopup.style.display = 'flex';
+  }
+});
+
+// Fermer popup
+closeEditor.addEventListener('click', () => { editorPopup.style.display = 'none'; });
+
+// Sauvegarder modifications
+function saveEditor(){
+  if(currentEditIndex === null) return;
+
+  // Mettre à jour inputs du preview
+  document.getElementById(`title-${currentEditIndex}`).value = editorTitle.value;
+  document.getElementById(`desc-${currentEditIndex}`).value = editorDesc.value;
+
+  // Mettre à jour données CMS
+  uploadedImages[currentEditIndex].title = editorTitle.value;
+  uploadedImages[currentEditIndex].description = editorDesc.value;
+
+  editorPopup.style.display = 'none';
+  alert("Modifications sauvegardées !");
+}
+</script>
+  
+  <!<!DOCTYPE html><html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0"><!-- SEO META --><title>Atete Majesty — Plateforme IA & Création</title>
+<meta name="description" content="Plateforme professionnelle IA, graphisme, formations et outils créatifs.">
+<meta name="keywords" content="IA, Graphisme, Formations, CMS, Création"><!-- Firebase SDK --><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js"></script><style>
+body{margin:0;font-family:Arial;background:#f5f5f5}
+header{background:#000;color:#fff;padding:15px;text-align:center}
+.container{padding:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+.card{background:#fff;border-radius:12px;box-shadow:0 5px 15px rgba(0,0,0,.1);padding:15px;cursor:pointer}
+.card img{width:100%;border-radius:10px}
+button{padding:10px 14px;border:none;border-radius:8px;background:#6a00ff;color:#fff;cursor:pointer}
+input,textarea,select{width:100%;padding:10px;margin-bottom:10px;border-radius:8px;border:1px solid #ccc}
+#dashboard{display:none;background:#111;color:#fff;padding:20px;margin-top:20px;border-radius:12px}
+</style></head>
+<body><header>
+<h1></h1>
+</button>
+<button 
+</header><div class="container"><!-- FORMATION PACKS --><h2>Packs de Formations IA</h2>
+<div class="grid"><div class="card" onclick="openPack('pack1')">
+<img src="https://via.placeholder.com/400x250?text=Formation+ChatGPT">
+<h3>Formation ChatGPT Pro</h3>
+</div><div class="card" onclick="openPack('pack2')">
+<img src="https://via.placeholder.com/400x250?text=Graphisme+IA">
+<h3>Graphisme IA Ultra Pro</h3>
+</div><div class="card" onclick="openPack('pack3')">
+<img src="https://via.placeholder.com/400x250?text=Business+IA">
+<h3>Business & Automatisation IA</h3>
+</div></div><!-- OUTILS GRAPHIQUES --><h2>Outils Créatifs Intégrés</h2>
+<div class="grid"><div class="card" onclick="openEditor()">
+<img src="https://via.placeholder.com/400x250?text=Créer+Affiche">
+<h3>Créer une Affiche Pro IA</h3>
+</div><div class="card" onclick="openTemplates()">
+<img src="https://via.placeholder.com/400x250?text=Templates">
+<h3>Modifier nos Templates</h3>
+</div></div><!-- CMS ARTICLES --><h2>Articles & Catégories</h2>
+<select id="categoryFilter">
+<option value="">Toutes catégories</option>
+<option value="IA">IA</option>
+<option value="Graphisme">Graphisme</option>
+<option value="Business">Business</option>
+</select><div id="articles" class="grid"></div><!-- DASHBOARD ADMIN --><div id="dashboard">
+<h2>Dashboard Admin</h2>
+<input id="title" placeholder="Titre article">
+<textarea id="desc" placeholder="Description"></textarea>
+<select id="category">
+<option>IA</option>
+<option>Graphisme</option>
+<option>Business</option>
+</select>
+<input type="file" id="image">
+<button onclick="publishArticle()">Publier</button>
+</div></div><!-- REGISTER MODAL --><div id="registerModal" style="display:none" class="container">
+<h2>Inscription</h2>
+<input id="regEmail" placeholder="Email">
+<input id="regPass" type="password" placeholder="Mot de passe">
+<button onclick="register()">Créer compte</button>
+</div><!-- LOGIN MODAL --><div id="loginModal" style="display:none" class="container">
+<h2>Connexion</h2>
+<input id="logEmail" placeholder="Email">
+<input id="logPass" type="password" placeholder="Mot de passe">
+<button onclick="login()">Connexion</button>
+</div><script>
+
+// FIREBASE CONFIG (À REMPLACER)
+const firebaseConfig = {
+apiKey:"YOUR_KEY",
+authDomain:"YOUR_DOMAIN",
+projectId:"YOUR_ID",
+storageBucket:"YOUR_BUCKET",
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+// REGISTER
+function openRegister(){
+document.getElementById('registerModal').style.display='block';
+}
+
+function register(){
+const email = regEmail.value;
+const pass = regPass.value;
+auth.createUserWithEmailAndPassword(email,pass);
+}
+
+// LOGIN
+function openLogin(){
+document.getElementById('loginModal').style.display='block';
+}
+
+function login(){
+const email = logEmail.value;
+const pass = logPass.value;
+auth.signInWithEmailAndPassword(email,pass)
+.then(()=> dashboard.style.display='block');
+}
+
+// PUBLISH ARTICLE
+async function publishArticle(){
+const file = image.files[0];
+const ref = storage.ref('articles/'+file.name);
+await ref.put(file);
+const url = await ref.getDownloadURL();
+
+await db.collection('articles').add({
+title:title.value,
+desc:desc.value,
+category:category.value,
+image:url,
+likes:0,
+views:0
+});
+
+loadArticles();
+}
+
+// LOAD ARTICLES
+async function loadArticles(){
+articles.innerHTML='';
+const snap = await db.collection('articles').get();
+
+snap.forEach(doc=>{
+const a = doc.data();
+articles.innerHTML += `
+<div class="card" onclick="viewArticle('${doc.id}')">
+<img src="${a.image}">
+<h3>${a.title}</h3>
+<p>${a.category}</p>
+<button onclick="likeArticle('${doc.id}')">❤️</button>
+</div>`;
+});
+}
+
+// LIKE
+function likeArticle(id){
+const ref = db.collection('articles').doc(id);
+ref.update({likes:firebase.firestore.FieldValue.increment(1)});
+}
+
+// VIEW
+function viewArticle(id){
+const ref = db.collection('articles').doc(id);
+ref.update({views:firebase.firestore.FieldValue.increment(1)});
+}
+
+// FORMATION PACK
+function openPack(id){
+alert('Ouverture page formation : '+id);
+}
+
+// GRAPHIC EDITOR
+function openEditor(){
+window.open('https://www.photopea.com','_blank');
+}
+
+function openTemplates(){
+alert('Ouverture templates modifiables');
+}
+
+loadArticles();
+</script></body>
+</html>
+  <input type="file" accept="image/*" onchange="preview(event)">
+<br><br>
+<img id="output" width="200">
+
+<script>
+function preview(event){
+  let reader = new FileReader();
+  reader.onload = function(){
+    document.getElementById("output").src = reader.result;
+  }
+  reader.readAsDataURL(event.target.files[0]);
+}
+</script>  
+<input type="file" accept="image/*" onchange="preview(event)">
+<br><br>
+<img id="output" width="200">
+
+<script>
+function preview(event){
+  let reader = new FileReader();
+  reader.onload = function(){
+    document.getElementById("output").src = reader.result;
+  }
+  reader.readAsDataURL(event.target.files[0]);
+}
+</script>
+    <input type="file" accept="image/*" onchange="preview(event)">
+<br><br>
+<img id="output" width="200">
+
+<script>
+function preview(event){
+  let reader = new FileReader();
+  reader.onload = function(){
+    document.getElementById("output").src = reader.result;
+  }
+  reader.readAsDataURL(event.target.files[0]);
+}
+</script>
+    <h3>Commentaires</h3>
+
+<input type="text" id="commentInput" placeholder="Écrire un commentaire">
+<button onclick="addComment()">Envoyer</button>
+
+<ul id="commentList"></ul>
+
+<script>
+function loadComments(){
+  let comments = JSON.parse(localStorage.getItem("comments")) || [];
+  let list = document.getElementById("commentList");
+  list.innerHTML = "";
+
+  comments.forEach(c => {
+    let li = document.createElement("li");
+    li.innerText = c;
+    list.appendChild(li);
+  });
+}
+
+function addComment(){
+  let input = document.getElementById("commentInput");
+  let comments = JSON.parse(localStorage.getItem("comments")) || [];
+
+  comments.push(input.value);
+  localStorage.setItem("comments", JSON.stringify(comments));
+  input.value = "";
+
+  loadComments();
+}
+
+loadComments();
+</script>
+    <form action="mailto:tonemail@gmail.com" method="post" enctype="text/plain">
+  <input type="text" name="Nom" placeholder="Votre nom" required>
+  <input type="email" name="Email" placeholder="Votre email" required>
+  <textarea name="Message" placeholder="Message"></textarea>
+  <button type="submit">Envoyer</button>
+</form>
+    <!-- PAIEMENT -->
+<div id="payment" class="modal">
+  <div class="modal-content">
+    <h3>Paiement Orange Money</h3>
+    <p>Envoyez le paiement au :</p>
+    <b>+243 89 42 44 747</b>
+    <p>Montant : <b>5$</b></p>
+    <button onclick="downloadPDF()">J’ai payé ✔</button>
+    <button onclick="closeAll()">❌ Annuler</button>
+  </div>
+  
+</div>
+<!-- CONDITIONS D'UTILISATION & CONFIDENTIALITÉ -->
+<div class="card">
+  <h2>📜 Conditions d'utilisation et Confidentialité</h2>
+  <div style="max-height:200px;overflow-y:auto;padding:10px;border:1px solid #ccc;border-radius:10px;">
+    <p>
+      Bienvenue sur Atete majesty. En utilisant notre site, vous acceptez les conditions suivantes :
+    </p>
+    <ul>
+      <li>Vous devez utiliser nos services de manière légale et responsable.</li>
+      <li>Les contenus générés par l'IA sont fournis à titre indicatif. Nous ne garantissons pas leur exactitude.</li>
+      <li>Vos données personnelles sont collectées uniquement pour améliorer l'expérience utilisateur et ne seront jamais vendues à des tiers.</li>
+      <li>Nous nous réservons le droit de modifier ces conditions à tout moment. Il est recommandé de les consulter régulièrement.</li>
+      <li>L'utilisation de nos services implique votre accord avec cette politique de confidentialité et ces conditions d'utilisation.</li>
+    </ul>
+    <p>
+      Pour toute question ou réclamation, contactez-nous à : <b>contact@cahesatete.com</b>
+    </p>
+  </div>
+</div>
+<footer>
+<div class="social">
+<a href="https://facebook.com" target="_blank">Facebook</a>
+<a href="https://twitter.com" target="_blank">Twitter</a>
+<a href="https://youtube.com" target="_blank">YouTube</a>
+<a href="https://pinterest.com" target="_blank">Pinterest</a>
+</div>
+<p>© 2026 atete majesty</p>
+</footer>
+
+<script>
+// LOGO DYNAMIQUE
+function uploadLogo(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    document.getElementById("logoImg").src=e.target.result;
+    document.getElementById("logoImg").style.display="block";
+    document.getElementById("logoText").style.display="none";
+  };
+  reader.readAsDataURL(file);
+}
+
+// IA GENERATION
+function generate(){
+  let t=type.value,s=style.value,l=length.value;
+  content.value=`${t} - Style ${s} - Longueur ${l}\nContenu généré automatiquement pour votre réussite professionnelle.`;
+}
+
+// LOGIN / PAIEMENT
+function prepareDownload(){login.style.display="block";}
+function openLogin(){login.style.display="block";}
+function openPayment(){login.style.display="none";payment.style.display="block";}
+function closeAll(){login.style.display="none";payment.style.display="none";}
+
+// EXPORT PDF
+function downloadPDF(){
+  const { jsPDF }=window.jspdf;
+  let pdf=new jsPDF();
+  pdf.text(content.value,10,20);
+  pdf.save("Atete_IA_Document.pdf");
+  closeAll();
+}
+
+// CANVAS
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+function draw(){
+  ctx.fillStyle="#c62828";
+  ctx.fillRect(0,0,300,200);
+  ctx.fillStyle="white";
+  ctx.font="20px Poppins";
+  ctx.fillText("Votre Design",60,110);
+}
+
+// UPLOAD ARTICLES
+function uploadProducts(event){
+  const container=document.getElementById("products");
+  Array.from(event.target.files).forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const img=document.createElement("img");
+      img.src=e.target.result;
+      img.style.width="120px";
+      img.style.borderRadius="10px";
+      img.style.boxShadow="0 5px 15px rgba(0,0,0,.2)";
+      container.appendChild(img);
+      
+    };
+    reader.readAsDataURL(file);
+  });
+}
+</script>
+     <!DOCTYPE html>
+<html lang="fr">
+<head><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Changement de Logo</title>
+<style>
+  #logo {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<img id="logo" src="CCC.png" alt="Logo">
+<!-- Boutons contact flottants -->
+<div style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:1000;">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Mini CMS IA avec Login</title>
+
+<!-- EXTENSIONS AJOUTÉES SANS MODIFIER TON DESIGN -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+<style>
+/* === TON DESIGN ORIGINAL CONSERVÉ === */
+body { font-family: Arial; background:#f9f9f9; margin:0; padding:0; }
+h1 { text-align:center; margin:20px 0; }
+
+#loginBtn {
+  position: fixed; top:20px; right:20px; padding:10px 16px;
+  background:#6a00ff; color:white; border:none; border-radius:8px; cursor:pointer; z-index:1000;
+}
+
+#homeBtn {
+  position:fixed; top:20px; left:20px; padding:10px 16px;
+  background:#6a00ff; color:white; border:none; border-radius:8px; cursor:pointer; z-index:1000;
+}
+
+/* === FOLLOW SOCIAL EXTENSION === */
+.social-follow {
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  z-index:1500;
+}
+
+.social-follow a {
+  width:45px;
+  height:45px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#fff;
+  border-radius:50%;
+  text-decoration:none;
+  font-size:18px;
+  box-shadow:0 5px 15px rgba(0,0,0,0.2);
+}
+
+.whatsapp{background:#25D366}
+.telegram{background:#0088cc}
+.facebook{background:#1877F2}
+.twitter{background:#000}
+.tiktok{background:#111}
+.youtube{background:#FF0000}
+
+/* === LIKES / VUES / COMMENTAIRES === */
+.engagement-box{
+  padding:10px;
+  border-top:1px solid #eee;
+  display:flex;
+  gap:15px;
+  align-items:center;
+  font-size:14px;
+}
+
+.comment-box{
+  margin-top:15px;
+}
+
+.comment-box textarea{
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+
+.comment{
+  background:#f1f1f1;
+  padding:8px;
+  border-radius:8px;
+  margin-top:6px;
+}
+</style>
+</head>
+<body>
+
+
+
+<!-- FOLLOW SOCIAL -->
+<div class="social-follow">
+  <a href="https://wa.me/243824321288" target="_blank" class="whatsapp"><i class="fab fa-whatsapp"></i></a>
+  <a href="https://t.me/243824321288" class="telegram"><i class="fab fa-telegram"></i></a>
+  <a href="https://www.facebook.com/share/187DbD9qoZ/"" class="facebook"><i class="fab fa-facebook"></i></a>
+  <a href="#" class="twitter"><i class="fab fa-x-twitter"></i></a>
+  <a href="https://tiktok.com/@caches_officyel" class="tiktok"><i class="fab fa-tiktok"></i></a>
+  <a href="https://www.youtube.com/@CachésAtete-l8y" class="youtube"><i class="fab fa-youtube"></i></a>
+</div>
+
+<!-- FORM ARTICLE ORIGINAL -->
+<div id="articleForm" style="max-width:600px;margin:60px auto;padding:20px;background:#fff;border-radius:14px;display:none;">
+  <input type="text" id="title" placeholder="Titre">
+  <textarea id="description" placeholder="Description"></textarea>
+  <input type="file" id="images" multiple>
+  <button onclick="submitArticle()">Publier</button>
+</div>
+
+<div id="articlesContainer"></div>
+
+<script>
+
+/* === BASE ORIGINALE CONSERVÉE === */
+let articles = JSON.parse(localStorage.getItem('articles')) || [];
+
+/* === EXTENSION LIKES / VUES / COMMENTAIRES === */
+function submitArticle(){
+  const title = document.getElementById('title').value;
+  const description = document.getElementById('description').value;
+
+  const article = {
+    title,
+    description,
+    likes:0,
+    views:0,
+    comments:[]
+  };
+
+  articles.push(article);
+  localStorage.setItem('articles',JSON.stringify(articles));
+  loadArticles();
+}
+
+function loadArticles(){
+  const container = document.getElementById('articlesContainer');
+  container.innerHTML='';
+
+  articles.forEach((a,i)=>{
+    container.innerHTML += `
+    <div style="background:#fff;margin:20px;padding:15px;border-radius:12px;">
+      <h3 onclick="viewArticle(${i})">${a.title}</h3>
+      <p>${a.description}</p>
+
+      <div class="engagement-box">
+        <span onclick="like(${i})">❤️ ${a.likes}</span>
+        <span>👁️ ${a.views}</span>
+      </div>
+
+      <div class="comment-box">
+        <textarea id="c${i}" placeholder="Commenter..."></textarea>
+        <button onclick="addComment(${i})">Envoyer</button>
+        ${a.comments.map(c=>`<div class='comment'>${c}</div>`).join('')}
+      </div>
+
+    </div>`;
+  });
+}
+
+function like(i){
+  articles[i].likes++;
+  localStorage.setItem('articles',JSON.stringify(articles));
+  loadArticles();
+}
+
+function viewArticle(i){
+  articles[i].views++;
+  localStorage.setItem('articles',JSON.stringify(articles));
+  loadArticles();
+}
+
+function addComment(i){
+  const val = document.getElementById('c'+i).value;
+  if(!val) return;
+  articles[i].comments.push(val);
+  localStorage.setItem('articles',JSON.stringify(articles));
+  loadArticles();
+}
+
+loadArticles();
+</script>
+
+</body>
+</html>
+
+  </a>
+
+</div>
+</body>
+</html><style>
+body {:0;padding:0;font-family:'Orbitron',sans-serif;background: linear-gradient(135deg,#ff0000,#ffffff,#ffa500,#00bfff);
+<!-- FOLLOW SOCIAL --><div class="social-follow">
+  <a href="https://wa.me/243824321288" target="_blank" class="whatsapp"><i class="fab fa-whatsapp"></i></a>
+  <a href="#" class="telegram"><i class="fab fa-telegram"></i></a>
+  <a href="https://www.facebook.com/share/187DbD9qoZ/" target="_blank" class="facebook"><i class="fab fa-facebook"></i></a>
+  <a href="#" class="twitter"><i class="fab fa-x-twitter"></i></a>
+  <a href="https://tiktok.com/@caches_officyel" target="_blank" class="tiktok"><i class="fab fa-tiktok"></i></a>
+  <a href="https://www.youtube.com/@CachésAtete-l8y" target="_blank" class="youtube"><i class="fab fa-youtube"></i></a>
+</div>
+<div style="text-align:center; margin:20px; font-size:16px;">
+  Suivez-moi sur mes autres plateformes pour ne rien manquer ! 👇
+</div>
+ 
